@@ -2024,9 +2024,11 @@ namespace SharpGL
         {
             GetDelegateFor<glClearBufferfi>()(buffer, drawbuffer, depth, stencil);
         }
-        public string GetString(uint name, uint index)
+        public unsafe string GetString(uint name, uint index)
         {
-            return (string)GetDelegateFor<glGetStringi>()(name, index);
+            sbyte* pStr = (sbyte*)GetDelegateFor<glGetStringi>()(name, index);
+            var str = new string(pStr);
+            return str;
         }
 
         //  Delegates
@@ -2087,7 +2089,7 @@ namespace SharpGL
         private delegate void glClearBufferuiv (uint buffer, int drawbuffer, uint[] value);
         private delegate void glClearBufferfv (uint buffer, int drawbuffer, float[] value);
         private delegate void glClearBufferfi (uint buffer, int drawbuffer, float depth, int stencil);
-        private delegate string glGetStringi (uint name, uint index);
+        private delegate IntPtr glGetStringi (uint name, uint index);
 
         //  Constants
         public const uint GL_COMPARE_REF_TO_TEXTURE                        = 0x884E;
@@ -2294,10 +2296,40 @@ namespace SharpGL
             GetDelegateFor<glFramebufferTexture>()(target, attachment, texture, level);
         }
 
+        /// <summary>
+        /// Render primitives from array data with a per-element offset.
+        /// </summary>
+        /// <param name="mode">Specifies what kind of primitives to render. Symbolic constants OpenGL.GL_POINTS, OpenGL.GL_LINE_STRIP, OpenGL.GL_LINE_LOOP, OpenGL.GL_LINES, OpenGL.GL_TRIANGLE_STRIP, OpenGL.GL_TRIANGLE_FAN, OpenGL.GL_TRIANGLES, OpenGL.GL_LINES_ADJACENCY, OpenGL.GL_LINE_STRIP_ADJACENCY, OpenGL.GL_TRIANGLES_ADJACENCY, OpenGL.GL_TRIANGLE_STRIP_ADJACENCY and OpenGL.GL_PATCHES are accepted.</param>
+        /// <param name="count">Specifies the number of elements to be rendered.</param>
+        /// <param name="type">Specifies the type of the values in indices. Must be one of GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT, or GL_UNSIGNED_INT.</param>
+        /// <param name="indices">Specifies a pointer to the location where the indices are stored.</param>
+        /// <param name="basevertex">Specifies a constant that should be added to each element of indices when chosing elements from the enabled vertex arrays.</param>
+        public void DrawElementsBaseVertex(uint mode, int count, uint type, IntPtr indices, int basevertex)
+        {
+            GetDelegateFor<glDrawElementsBaseVertex>()(mode, count, type, indices, basevertex);
+        }
+
+        /// <summary>
+        /// Render primitives from array data with a per-element offset. Uses OpenGL.GL_UNSIGNED_INT as the data type.
+        /// </summary>
+        /// <param name="mode">Specifies what kind of primitives to render. Symbolic constants OpenGL.GL_POINTS, OpenGL.GL_LINE_STRIP, OpenGL.GL_LINE_LOOP, OpenGL.GL_LINES, OpenGL.GL_TRIANGLE_STRIP, OpenGL.GL_TRIANGLE_FAN, OpenGL.GL_TRIANGLES, OpenGL.GL_LINES_ADJACENCY, OpenGL.GL_LINE_STRIP_ADJACENCY, OpenGL.GL_TRIANGLES_ADJACENCY, OpenGL.GL_TRIANGLE_STRIP_ADJACENCY and OpenGL.GL_PATCHES are accepted.</param>
+        /// <param name="count">Specifies the number of elements to be rendered.</param>
+        /// <param name="indices">Specifies a pointer to the location where the indices are stored.</param>
+        /// <param name="basevertex">Specifies a constant that should be added to each element of indices when chosing elements from the enabled vertex arrays.</param>
+        public void DrawElementsBaseVertex(uint mode, int count, uint[] indices, int basevertex)
+        {
+            //  This helper version of the the function handles the pinning of the memory for the caller.
+            var pinnedIndices = GCHandle.Alloc(indices, GCHandleType.Pinned);
+            var pointer = pinnedIndices.AddrOfPinnedObject();
+            GetDelegateFor<glDrawElementsBaseVertex>()(mode, count, OpenGL.GL_UNSIGNED_INT, pointer, basevertex);
+            pinnedIndices.Free();
+        }
+
         //  Delegates
         private delegate void glGetInteger64i_v (uint target, uint index, Int64[] data);
         private delegate void glGetBufferParameteri64v (uint target, uint pname, Int64[] parameters);
         private delegate void glFramebufferTexture (uint target, uint attachment, uint texture, int level);
+        private delegate void glDrawElementsBaseVertex(uint mode, int count, uint type, IntPtr indices, int basevertex);
 
         //  Constants
         public const uint GL_CONTEXT_CORE_PROFILE_BIT                  = 0x00000001;
@@ -2306,6 +2338,7 @@ namespace SharpGL
         public const uint GL_LINE_STRIP_ADJACENCY                      = 0x000B;
         public const uint GL_TRIANGLES_ADJACENCY                       = 0x000C;
         public const uint GL_TRIANGLE_STRIP_ADJACENCY                  = 0x000D;
+        public const uint GL_PATCHES                                   = 0x000E;
         public const uint GL_PROGRAM_POINT_SIZE                        = 0x8642;
         public const uint GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS          = 0x8C29;
         public const uint GL_FRAMEBUFFER_ATTACHMENT_LAYERED            = 0x8DA7;
@@ -2322,7 +2355,7 @@ namespace SharpGL
         public const uint GL_MAX_GEOMETRY_OUTPUT_COMPONENTS            = 0x9124;
         public const uint GL_MAX_FRAGMENT_INPUT_COMPONENTS             = 0x9125;
         public const uint GL_CONTEXT_PROFILE_MASK                      = 0x9126;
-        
+
         #endregion
 
         #region OpenGL 3.3
@@ -4893,14 +4926,14 @@ namespace SharpGL
         /// </summary>
         /// <param name="hShareContext">
         /// If is not null, then all shareable data (excluding
-        /// OpenGL texture objects named 0) will be shared by <hshareContext>,
-        /// all other contexts <hshareContext> already shares with, and the
+        /// OpenGL texture objects named 0) will be shared by hShareContext,
+        /// all other contexts hShareContext already shares with, and the
         /// newly created context. An arbitrary number of contexts can share
         /// data in this fashion.</param>
         /// <param name="attribList">
         /// specifies a list of attributes for the context. The
-        /// list consists of a sequence of <name,value> pairs terminated by the
-        /// value 0. If an attribute is not specified in <attribList>, then the
+        /// list consists of a sequence of (name,value) pairs terminated by the
+        /// value 0. If an attribute is not specified in attribList, then the
         /// default value specified below is used instead. If an attribute is
         /// specified more than once, then the last value specified is used.
         /// </param>
@@ -5835,6 +5868,83 @@ namespace SharpGL
         public const uint GL_VERTEX_BINDING_BUFFER                          = 0x8F4F;
         public const uint GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET              = 0x82D9;  
         public const uint GL_MAX_VERTEX_ATTRIB_BINDINGS                     = 0x82DA;  
+
+        #endregion
+
+        #region WGL_NV_DX_interop / WGL_NV_DX_interop2
+
+        public bool DXSetResourceShareHandleNV(IntPtr dxObject, IntPtr shareHandle)
+        {
+            return (bool)GetDelegateFor<wglDXSetResourceShareHandleNV>()(dxObject, shareHandle);
+        }
+
+        public IntPtr DXOpenDeviceNV(IntPtr dxDevice)
+        {
+            return (IntPtr)GetDelegateFor<wglDXOpenDeviceNV>()(dxDevice);
+        }
+
+        public bool DXCloseDeviceNV(IntPtr hDevice)
+        {
+            return (bool)GetDelegateFor<wglDXCloseDeviceNV>()(hDevice);
+        }
+
+        public IntPtr DXRegisterObjectNV(IntPtr hDevice, IntPtr dxObject, uint name, uint type, uint access)
+        {
+            return (IntPtr)GetDelegateFor<wglDXRegisterObjectNV>()(hDevice, dxObject, name, type, access);
+        }
+
+        public bool DXUnregisterObjectNV(IntPtr hDevice, IntPtr hObject)
+        {
+            return (bool)GetDelegateFor<wglDXUnregisterObjectNV>()(hDevice, hObject);
+        }
+
+        public bool DXObjectAccessNV(IntPtr hObject, uint access)
+        {
+            return (bool)GetDelegateFor<wglDXObjectAccessNV>()(hObject, access);
+        }
+
+        public bool DXLockObjectsNV(IntPtr hDevice, IntPtr[] hObjects)
+        {
+            unsafe
+            {
+                void** objects = stackalloc void*[hObjects.Length];
+
+                for (int i = 0; i<hObjects.Length; i++)
+                {
+                    objects[i] = hObjects[i].ToPointer();
+                }
+
+                return (bool)GetDelegateFor<wglDXLockObjectsNV>()(hDevice, hObjects.Length, objects);
+            }
+        }
+
+        public bool DXUnlockObjectsNV(IntPtr hDevice, IntPtr[] hObjects)
+        {
+            unsafe
+            {
+                void** objects = stackalloc void*[hObjects.Length];
+
+                for (int i = 0; i<hObjects.Length; i++)
+                {
+                    objects[i] = hObjects[i].ToPointer();
+                }
+
+                return (bool)GetDelegateFor<wglDXUnlockObjectsNV>()(hDevice, hObjects.Length, objects);
+            }
+        }
+
+        private delegate bool wglDXSetResourceShareHandleNV(IntPtr dxObject, IntPtr shareHandle);
+        private delegate IntPtr wglDXOpenDeviceNV(IntPtr dxDevice);
+        private delegate bool wglDXCloseDeviceNV(IntPtr hDevice);
+        private delegate IntPtr wglDXRegisterObjectNV(IntPtr hDevice, IntPtr dxObject, uint name, uint type, uint access);
+        private delegate bool wglDXUnregisterObjectNV(IntPtr hDevice, IntPtr hObject);
+        private delegate bool wglDXObjectAccessNV(IntPtr hObject, uint access);
+        private unsafe delegate bool wglDXLockObjectsNV(IntPtr hDevice, int count, void** hObjects);
+        private unsafe delegate bool wglDXUnlockObjectsNV(IntPtr hDevice, int count, void** hObjects);
+
+        public const uint WGL_ACCESS_READ_ONLY_NV = 0x0000;
+        public const uint WGL_ACCESS_READ_WRITE_NV = 0x0001;
+        public const uint WGL_ACCESS_WRITE_DISCARD_NV = 0x0002;
 
         #endregion
     }

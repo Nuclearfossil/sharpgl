@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.ComponentModel;
-using SharpGL.SceneGraph.NETDesignSurface.Converters;
 using System.Xml.Serialization;
 
 namespace SharpGL.SceneGraph
@@ -11,7 +6,6 @@ namespace SharpGL.SceneGraph
     /// <summary>
     /// The Vertex class represents a 3D point in space.
     /// </summary>
-    [TypeConverter(typeof(VertexConverter))]
     public struct Vertex
     {
         /// <summary>
@@ -191,6 +185,9 @@ namespace SharpGL.SceneGraph
         /// </summarY>
         public void UnitLength()
         {
+            //  Zero length vertexes are always normalized to zero.
+            if (x == 0f && y == 0f && z == 0f) return;
+
             float f = X * X + Y * Y + Z * Z;
             float frt = (float)Math.Sqrt(f);
             X /= frt;

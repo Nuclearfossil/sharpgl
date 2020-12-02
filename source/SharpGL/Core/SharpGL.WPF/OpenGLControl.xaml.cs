@@ -34,7 +34,7 @@ namespace SharpGL.WPF
         /// Handles the Loaded event of the OpenGLControl control.
         /// </summary>
         /// <param name="sender">The source of the event.</param>
-        /// <param name="e">The <see cref="System.Windows.RoutedEventArgs"/> Instance containing the event data.</param>
+        /// <param name="routedEventArgs">The <see cref="System.Windows.RoutedEventArgs"/> Instance containing the event data.</param>
         private void OpenGLControl_Loaded(object sender, RoutedEventArgs routedEventArgs)
         {
             SizeChanged += OpenGLControl_SizeChanged;
@@ -42,15 +42,18 @@ namespace SharpGL.WPF
             UpdateOpenGLControl((int) RenderSize.Width, (int) RenderSize.Height);
 
             //  DispatcherTimer setup
-            timer.Tick += new EventHandler(timer_Tick);
-            timer.Start();
+            timer.Tick += timer_Tick;
+            if (RenderTrigger == RenderTrigger.TimerBased)
+            {
+                timer.Start();
+            }
         }
 
         /// <summary>
         /// Handles the Unloaded event of the OpenGLControl control.
         /// </summary>
         /// <param name="sender">The source of the event.</param>
-        /// <param name="e">The <see cref="System.Windows.RoutedEventArgs"/> Instance containing the event data.</param>
+        /// <param name="routedEventArgs">The <see cref="System.Windows.RoutedEventArgs"/> Instance containing the event data.</param>
         private void OpenGLControl_Unloaded(object sender, RoutedEventArgs routedEventArgs)
         {
             SizeChanged -= OpenGLControl_SizeChanged;
@@ -76,7 +79,6 @@ namespace SharpGL.WPF
         /// <param name="height">The height of the OpenGL drawing area.</param>
         private void UpdateOpenGLControl(int width, int height)
         {
-            SizeChangedEventArgs e;
             // Lock on OpenGL.
             lock (gl)
             {
@@ -88,10 +90,8 @@ namespace SharpGL.WPF
                 //  If we have a project handler, call it...
                 if (width != -1 && height != -1)
                 {
-                    var handler = Resized;
-                    if (handler != null)
-                        handler(this, eventArgsFast);
-                    else
+                    RaiseEvent(new OpenGLRoutedEventArgs(ResizedEvent, gl));
+                    if(_resizedCounter <= 0)
                     {
                         //  Otherwise we do our own projection.
                         gl.MatrixMode(OpenGL.GL_PROJECTION);
@@ -123,9 +123,6 @@ namespace SharpGL.WPF
                 gl.Create(OpenGLVersion, RenderContextType, 1, 1, 32, null);
             }
 
-            //  Create our fast event args.
-            eventArgsFast = new OpenGLEventArgs(gl);
-
             //  Set the most basic OpenGL styles.
             gl.ShadeModel(OpenGL.GL_SMOOTH);
             gl.ClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -135,9 +132,7 @@ namespace SharpGL.WPF
             gl.Hint(OpenGL.GL_PERSPECTIVE_CORRECTION_HINT, OpenGL.GL_NICEST);
 
             //  Fire the OpenGL initialised event.
-            var handler = OpenGLInitialized;
-            if (handler != null)
-                handler(this, eventArgsFast);
+            RaiseEvent(new OpenGLRoutedEventArgs(OpenGLInitializedEvent, gl));
 
             timer.Interval = new TimeSpan(0, 0, 0, 0, (int)(1000.0 / FrameRate));
         }
@@ -149,6 +144,14 @@ namespace SharpGL.WPF
         /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
         void timer_Tick(object sender, EventArgs e)
         {
+            DoRender();
+        }
+
+        /// <summary>
+        /// Executes the GL Render
+        /// </summary>
+        public void DoRender()
+        {
             //  Lock on OpenGL.
             lock (gl)
             {
@@ -159,16 +162,17 @@ namespace SharpGL.WPF
                 gl.MakeCurrent();
 
                 //	If there is a draw handler, then call it.
-                var handler = OpenGLDraw;
-                if (handler != null)
-                    handler(this, eventArgsFast);
-                else
+                //	If there is a draw handler, then call it.
+                RaiseEvent(new OpenGLRoutedEventArgs(OpenGLDrawEvent, gl));
+                if (_openGlDrawCounter <= 0)
+                {
                     gl.Clear(OpenGL.GL_COLOR_BUFFER_BIT);
+                }
 
                 //  Draw the FPS.
                 if (DrawFPS)
                 {
-                    gl.DrawText(5, 5, 1.0f, 0.0f, 0.0f, "Courier New", 12.0f,  string.Format("Draw Time: {0:0.0000} ms ~ {1:0.0} FPS", frameTime, 1000.0 / frameTime));
+                    gl.DrawText(5, 5, 1.0f, 0.0f, 0.0f, "Courier New", 12.0f, string.Format("Draw Time: {0:0.0000} ms ~ {1:0.0} FPS", frameTime, 1000.0 / frameTime));
                     gl.Flush();
                 }
 
@@ -217,7 +221,7 @@ namespace SharpGL.WPF
                 stopwatch.Stop();
 
                 //  Store the frame time.
-                frameTime = stopwatch.Elapsed.TotalMilliseconds;      
+                frameTime = stopwatch.Elapsed.TotalMilliseconds;
             }
         }
 
@@ -264,12 +268,7 @@ namespace SharpGL.WPF
                 me.timer.Start();
             }
         }
-
-        /// <summary>
-        /// A single event args for all our needs.
-        /// </summary>
-        private OpenGLEventArgs eventArgsFast;
-
+        
         /// <summary>
         /// The OpenGL instance.
         /// </summary>
@@ -290,24 +289,48 @@ namespace SharpGL.WPF
         /// </summary>
         protected double frameTime = 0;
 
+        private static readonly RoutedEvent OpenGLInitializedEvent = EventManager.RegisterRoutedEvent("OpenGLInitialized",
+            RoutingStrategy.Direct, typeof(OpenGLRoutedEventHandler), typeof(OpenGLControl));
+
         /// <summary>
         /// Occurs when OpenGL should be initialised.
         /// </summary>
         [Description("Called when OpenGL has been initialized."), Category("SharpGL")]
-        public event OpenGLEventHandler OpenGLInitialized;
+        public event OpenGLRoutedEventHandler OpenGLInitialized
+        {
+            add => AddHandler(OpenGLInitializedEvent, value);
+            remove => RemoveHandler(OpenGLInitializedEvent, value);
+        }
+
+        private static readonly RoutedEvent OpenGLDrawEvent = EventManager.RegisterRoutedEvent("OpenGLDraw",
+            RoutingStrategy.Direct, typeof(OpenGLRoutedEventHandler), typeof(OpenGLControl));
 
         /// <summary>
         /// Occurs when OpenGL drawing should occur.
         /// </summary>
         [Description("Called whenever OpenGL drawing can should occur."), Category("SharpGL")]
-        public event OpenGLEventHandler OpenGLDraw;
+        public event OpenGLRoutedEventHandler OpenGLDraw
+        {
+            add { _openGlDrawCounter++; AddHandler(OpenGLDrawEvent, value); }
+            remove { _openGlDrawCounter--; RemoveHandler(OpenGLDrawEvent, value); }
+        }
+        private int _openGlDrawCounter = 0;
+
+        private static readonly RoutedEvent ResizedEvent = EventManager.RegisterRoutedEvent("Resized",
+            RoutingStrategy.Direct, typeof(OpenGLRoutedEventHandler), typeof(OpenGLControl));
 
         /// <summary>
         /// Occurs when the control is resized. This can be used to perform custom projections.
         /// </summary>
         [Description("Called when the control is resized - you can use this to do custom viewport projections."), Category("SharpGL")]
-        public event OpenGLEventHandler Resized;
-        
+        public event OpenGLRoutedEventHandler Resized
+
+        {
+            add { _resizedCounter++; AddHandler(ResizedEvent, value); }
+            remove { _resizedCounter--; RemoveHandler(ResizedEvent, value); }
+        }
+        private int _resizedCounter = 0;
+
         /// <summary>
         /// The frame rate dependency property.
         /// </summary>
@@ -386,6 +409,30 @@ namespace SharpGL.WPF
         {
             get { return (bool)GetValue(DrawFPSProperty); }
             set { SetValue(DrawFPSProperty, value); }
+        }
+
+        /// <summary>
+        /// The Render trigger of this control
+        /// </summary>
+        public static readonly DependencyProperty RenderTriggerProperty =
+            DependencyProperty.Register("RenderMode", typeof(RenderTrigger), typeof(OpenGLControl),
+            new PropertyMetadata(RenderTrigger.TimerBased));
+
+        /// <summary>
+        /// Gets or sets the Render trigger of this control
+        /// </summary>
+        public RenderTrigger RenderTrigger {
+            get { return (RenderTrigger)GetValue(RenderTriggerProperty); }
+            set
+            {
+                SetValue(RenderTriggerProperty, value);
+                if (value == RenderTrigger.TimerBased)
+                {
+                    timer.Start();
+                } else {
+                    timer.Stop();
+                }
+            }
         }
 
         /// <summary>
